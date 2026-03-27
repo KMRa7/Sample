@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>サンプルフォーム</title>
+  <title>サンプルフォーム（LIFF送信対応）</title>
 
   <!-- ここを自分のLIFF IDに置き換えてください -->
   <meta name="liff-id" content="2009621799-NxpRjuH3" />
@@ -72,23 +72,6 @@
       color:var(--muted);
       margin:0 0 6px;
       line-height:1.4;
-    }
-    .status{
-      margin:10px 14px 0;
-      padding:10px 12px;
-      border-radius:10px;
-      background:#fff8d9;
-      border:1px solid #eed98a;
-      font-size:13px;
-      line-height:1.5;
-    }
-    .status.ok{
-      background:#eefaf0;
-      border-color:#b7dfbf;
-    }
-    .status.err{
-      background:#fff1f1;
-      border-color:#f0b3b3;
     }
     input, select, textarea{
       width:100%;
@@ -326,7 +309,6 @@
 
 <body>
   <div class="titlebar">サンプルフォーム</div>
-  <div class="status" id="liffStatus">LIFF初期化前です。</div>
 
   <main class="sheet" id="inputView">
     <form id="sampleForm" novalidate>
@@ -429,11 +411,11 @@
 
       <div class="confirmActions">
         <button class="ghost" type="button" id="backBtn">戻る</button>
-        <button class="send" type="button" id="sendBtn">LINEで送信</button>
+        <button class="send" type="button" id="sendBtn">送信</button>
       </div>
 
       <p class="hint" style="margin-top:10px;">
-        ※LIFFブラウザ内では <code>liff.sendMessages()</code> で送信します。外部ブラウザでは送信できません。
+        ※LINEアプリ内で開いた場合のみ送信できます。
       </p>
     </div>
   </main>
@@ -488,7 +470,6 @@
     const inputView = el("inputView");
     const confirmView = el("confirmView");
     const summaryEl = el("summary");
-    const liffStatus = el("liffStatus");
 
     const customerName = el("customerName");
     const addressCity = el("addressCity");
@@ -523,29 +504,19 @@
 
     async function setupLiff(){
       if(!LIFF_ID || LIFF_ID === "YOUR_LIFF_ID"){
-        setStatus("LIFF ID が未設定です。meta[name=\"liff-id\"] を設定してください。", "err");
+        console.error("LIFF ID が未設定です。");
+        updateSendButtonState();
         return;
       }
 
       try{
         await liff.init({ liffId: LIFF_ID });
         liffReady = true;
-
-        if(liff.isInClient()){
-          setStatus("LIFF初期化完了。LINEアプリ内から送信できます。", "ok");
-        }else{
-          setStatus("LIFF初期化完了。ただし外部ブラウザです。LINEアプリ内で開くと送信できます。", "");
-        }
       }catch(error){
         console.error("LIFF init error:", error);
-        setStatus(`LIFFの初期化に失敗しました: ${error.message || error}`, "err");
+        console.error(`LIFFの初期化に失敗しました: ${error.message || error}`);
       }
       updateSendButtonState();
-    }
-
-    function setStatus(message, type = ""){
-      liffStatus.textContent = message;
-      liffStatus.className = `status ${type}`.trim();
     }
 
     function isFormRoughlyFilled(){

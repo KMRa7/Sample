@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>サンプルフォーム</title>
 
+  <!-- ここを自分のLIFF IDに置き換えてください -->
+  <meta name="liff-id" content="2009621799-NxpRjuH3" />
+
+  <!-- LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
   <style>
     :root{
       --bg:#f2f2f2;
@@ -67,6 +73,23 @@
       margin:0 0 6px;
       line-height:1.4;
     }
+    .status{
+      margin:10px 14px 0;
+      padding:10px 12px;
+      border-radius:10px;
+      background:#fff8d9;
+      border:1px solid #eed98a;
+      font-size:13px;
+      line-height:1.5;
+    }
+    .status.ok{
+      background:#eefaf0;
+      border-color:#b7dfbf;
+    }
+    .status.err{
+      background:#fff1f1;
+      border-color:#f0b3b3;
+    }
     input, select, textarea{
       width:100%;
       border:1px solid #d6d6d6;
@@ -90,7 +113,6 @@
 
     .subControl{ margin-top:10px; }
 
-    /* 同意/ポップアップ */
     .agreeBlock{
       display:flex;
       flex-direction:column;
@@ -126,7 +148,6 @@
     }
     .pillGreen:hover{ background:#f4f4f4; }
 
-    /* modal */
     .modalOverlay{
       position:fixed;
       inset:0;
@@ -232,7 +253,6 @@
       cursor:not-allowed;
     }
 
-    /* confirm view */
     .confirm{ display:none; padding:14px; }
     .confirm h2{ margin:8px 0 12px; font-size:18px; }
     .summary{
@@ -278,13 +298,16 @@
       font-weight:900;
       cursor:pointer;
     }
+    .send:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+    }
 
     @media (max-width:520px){
       .label{ width:140px; min-width:140px; }
       .sumKey{ width:140px; min-width:140px; }
     }
 
-    /* スマホ最適化 */
     html{ -webkit-text-size-adjust:100%; }
     .sheet{ max-width:640px; width:100%; }
     .row{
@@ -303,8 +326,8 @@
 
 <body>
   <div class="titlebar">サンプルフォーム</div>
+  <div class="status" id="liffStatus">LIFF初期化前です。</div>
 
-  <!-- 入力画面 -->
   <main class="sheet" id="inputView">
     <form id="sampleForm" novalidate>
       <div class="row">
@@ -377,7 +400,6 @@
         </div>
       </div>
 
-      <!-- 同意書 -->
       <div class="row">
         <div class="label">同意<span class="req">*</span></div>
         <div class="control">
@@ -400,7 +422,6 @@
     </form>
   </main>
 
-  <!-- 確認画面 -->
   <main class="sheet confirm" id="confirmView" aria-live="polite">
     <div style="padding:14px;">
       <h2>入力内容の確認</h2>
@@ -408,16 +429,15 @@
 
       <div class="confirmActions">
         <button class="ghost" type="button" id="backBtn">戻る</button>
-        <button class="send" type="button" id="sendBtn">送信（サンプル）</button>
+        <button class="send" type="button" id="sendBtn">LINEで送信</button>
       </div>
 
       <p class="hint" style="margin-top:10px;">
-        ※このサンプルは外部送信しません。「送信」はテキストをクリップボードへコピーし、コンソールにも出力します。
+        ※LIFFブラウザ内では <code>liff.sendMessages()</code> で送信します。外部ブラウザでは送信できません。
       </p>
     </div>
   </main>
 
-  <!-- 同意書 モーダル -->
   <div class="modalOverlay" id="consentModal" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
     <div class="modal">
       <div class="modalHeader">
@@ -428,12 +448,12 @@
       <div class="modalBody" id="consentBody">
         <h3>1. 入力内容について</h3>
         <p>
-          本フォームはサンプルです。入力いただいた内容は、確認画面への表示およびテキスト出力の目的でのみ使用します。
+          本フォームはサンプルです。入力いただいた内容は、確認画面への表示およびLINEメッセージ送信の目的でのみ使用します。
         </p>
 
         <h3>2. 個人情報の取り扱い（サンプル文）</h3>
         <ul>
-          <li>入力情報は、問い合わせ対応や連絡のために利用する想定です（本サンプルでは外部送信しません）。</li>
+          <li>入力情報は、問い合わせ対応や連絡のために利用する想定です。</li>
           <li>第三者への提供は行いません（法令に基づく場合を除く想定）。</li>
           <li>内容に不備がある場合、確認のご連絡を差し上げる想定です。</li>
         </ul>
@@ -463,9 +483,12 @@
   <script>
     const el = (id) => document.getElementById(id);
 
+    const LIFF_ID = document.querySelector('meta[name="liff-id"]')?.content || "";
+
     const inputView = el("inputView");
     const confirmView = el("confirmView");
     const summaryEl = el("summary");
+    const liffStatus = el("liffStatus");
 
     const customerName = el("customerName");
     const addressCity = el("addressCity");
@@ -483,21 +506,47 @@
     const backBtn = el("backBtn");
     const sendBtn = el("sendBtn");
 
-    // 同意（チェック）
     const agreeConsent = el("agreeConsent");
-
-    // 開くボタン
     const openConsent = el("openConsent");
 
-    // モーダル
     const consentModal = el("consentModal");
     const consentBody = el("consentBody");
     const agreeConsentBtn = el("agreeConsentBtn");
 
-    document.addEventListener("DOMContentLoaded", () => {
+    let liffReady = false;
+
+    document.addEventListener("DOMContentLoaded", async () => {
       syncConditionalUI();
       refreshConfirmButton();
+      await setupLiff();
     });
+
+    async function setupLiff(){
+      if(!LIFF_ID || LIFF_ID === "YOUR_LIFF_ID"){
+        setStatus("LIFF ID が未設定です。meta[name=\"liff-id\"] を設定してください。", "err");
+        return;
+      }
+
+      try{
+        await liff.init({ liffId: LIFF_ID });
+        liffReady = true;
+
+        if(liff.isInClient()){
+          setStatus("LIFF初期化完了。LINEアプリ内から送信できます。", "ok");
+        }else{
+          setStatus("LIFF初期化完了。ただし外部ブラウザです。LINEアプリ内で開くと送信できます。", "");
+        }
+      }catch(error){
+        console.error("LIFF init error:", error);
+        setStatus(`LIFFの初期化に失敗しました: ${error.message || error}`, "err");
+      }
+      updateSendButtonState();
+    }
+
+    function setStatus(message, type = ""){
+      liffStatus.textContent = message;
+      liffStatus.className = `status ${type}`.trim();
+    }
 
     function isFormRoughlyFilled(){
       const d = getFormData();
@@ -510,8 +559,11 @@
     }
 
     function refreshConfirmButton(){
-      // 「同意済み」かつ「必須が概ね埋まっている」なら押せる（見栄え用。最終は validate() で担保）
       toConfirm.disabled = !(agreeConsent.checked && isFormRoughlyFilled());
+    }
+
+    function updateSendButtonState(){
+      sendBtn.disabled = !(liffReady && liff.isInClient());
     }
 
     function syncConditionalUI(){
@@ -523,13 +575,11 @@
 
     noteFlag.addEventListener("change", syncConditionalUI);
 
-    // 入力に応じて確認ボタンを更新
     [customerName, addressCity, phone, birthday, noteFlag, noteDetailText, contactMethod, memo].forEach(node => {
       node.addEventListener("input", refreshConfirmButton);
       node.addEventListener("change", refreshConfirmButton);
     });
 
-    // ===== モーダル：下までスクロールしたら同意ボタン有効 =====
     function openModalWithScrollGate(modalEl, bodyEl, agreeBtnEl){
       modalEl.style.display = "flex";
       agreeBtnEl.disabled = true;
@@ -548,7 +598,6 @@
 
     openConsent.addEventListener("click", () => openModalWithScrollGate(consentModal, consentBody, agreeConsentBtn));
 
-    // 閉じる（ボタン＆背景）
     document.querySelectorAll("[data-close]").forEach(btn => {
       btn.addEventListener("click", () => el(btn.dataset.close).style.display = "none");
     });
@@ -556,7 +605,6 @@
       if(e.target === consentModal) consentModal.style.display = "none";
     });
 
-    // 同意する → チェックON
     agreeConsentBtn.addEventListener("click", () => {
       agreeConsent.checked = true;
       consentModal.style.display = "none";
@@ -575,7 +623,6 @@
         memo: memo.value.trim(),
       };
 
-      // 表示用
       d.noteText = (d.noteFlag !== "あり")
         ? "なし"
         : (d.noteDetail ? `あり（${d.noteDetail}）` : "あり");
@@ -600,13 +647,25 @@
 
       if(!d.contactMethod){ alert("連絡手段を選択してください。"); contactMethod.focus(); return null; }
       if(!d.memo){ alert("メモをご記入ください。"); memo.focus(); return null; }
-
       if(!agreeConsent.checked){ alert("同意事項を確認し、同意してください。"); return null; }
 
       return d;
     }
 
-    // confirm step
+    function buildMessageText(d){
+      return [
+        "≪サンプルフォーム≫",
+        `【氏名】${d.name}`,
+        `【住所（市町村まで）】${d.addressCity}`,
+        `【電話番号】${d.phone}`,
+        `【生年月日】${d.birthday}`,
+        `【特記事項】${d.noteText}`,
+        `【連絡手段】${d.contactMethod}`,
+        `【メモ】${d.memo}`,
+        "【同意】同意済み"
+      ].join("\n");
+    }
+
     toConfirm.addEventListener("click", () => {
       const d = validate();
       if(!d) return;
@@ -631,45 +690,47 @@
 
       inputView.style.display = "none";
       confirmView.style.display = "block";
+      updateSendButtonState();
       window.scrollTo({ top:0, behavior:"smooth" });
     });
 
-    // 確認画面の「戻る」
     backBtn.addEventListener("click", () => {
       confirmView.style.display = "none";
       inputView.style.display = "block";
       window.scrollTo({ top:0, behavior:"smooth" });
     });
 
-    // send（サンプル：コピー＆コンソール）
     sendBtn.addEventListener("click", async () => {
       const d = validate();
       if(!d) return;
 
-      const text =
-`≪サンプルフォーム≫
-【氏名】${d.name}
-【住所（市町村まで）】${d.addressCity}
-【電話番号】${d.phone}
-【生年月日】${d.birthday}
-【特記事項】${d.noteText}
-【連絡手段】${d.contactMethod}
-【メモ】${d.memo}
-【同意】同意済み`;
+      if(!liffReady){
+        alert("LIFFの初期化がまだ完了していません。");
+        return;
+      }
+      if(!liff.isInClient()){
+        alert("LINEアプリ内で開いたときだけ送信できます。");
+        return;
+      }
+
+      const text = buildMessageText(d);
 
       try{
-        // クリップボードにコピー（HTTPS または localhost で動作）
-        if(navigator.clipboard && window.isSecureContext){
-          await navigator.clipboard.writeText(text);
-          alert("（サンプル）テキストをクリップボードにコピーしました。");
-        }else{
-          alert("（サンプル）この環境ではクリップボードへコピーできません。コンソールを確認してください。");
+        await liff.sendMessages([
+          {
+            type: "text",
+            text
+          }
+        ]);
+
+        alert("LINEに送信しました。");
+
+        if(liff.isInClient()){
+          liff.closeWindow();
         }
-        console.log(text);
-      }catch(e){
-        console.error(e);
-        alert("（サンプル）処理に失敗しました。コンソールを確認してください。");
-        console.log(text);
+      }catch(error){
+        console.error("liff.sendMessages error:", error);
+        alert(`送信に失敗しました: ${error.message || error}`);
       }
     });
 
